@@ -1,0 +1,8 @@
+              <Bar dataKey="actual" fill="#0EA5E9" radius={[4, 4, 0, 0]} name="Actual (h)" />
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+      </div>
+    </div>
+  );
+}
