@@ -1,0 +1,205 @@
+import React, { useState, useEffect, useMemo, useRef } from "react";
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Cell } from "recharts";
+
+const STORAGE_KEY = "lifeplanner:data:v1";
+const PALETTE = ["#0EA5E9", "#8B5CF6", "#F59E0B", "#10B981", "#EC4899", "#F43F5E", "#6366F1", "#14B8A6"];
+const STATUS_OPTS = ["not-started", "in-progress", "completed", "skipped", "rescheduled"];
+const STATUS_LABEL = { "not-started": "Not started", "in-progress": "In progress", "completed": "Completed", "skipped": "Skipped", "rescheduled": "Rescheduled" };
+const STATUS_DOT = { "not-started": "bg-slate-300", "in-progress": "bg-blue-500", "completed": "bg-emerald-500", "skipped": "bg-slate-400", "rescheduled": "bg-violet-500" };
+const PRIORITY_OPTS = ["low", "medium", "high"];
+const PRIORITY_STYLE = { low: "text-slate-500 bg-slate-100", medium: "text-amber-700 bg-amber-100", high: "text-rose-700 bg-rose-100" };
+
+function pad(n) { return String(n).padStart(2, "0"); }
+function fmtDate(d) { return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`; }
+function todayStr() { return fmtDate(new Date()); }
+function parseDate(s) { const [y, m, d] = s.split("-").map(Number); return new Date(y, m - 1, d); }
+function addDaysStr(s, n) { const d = parseDate(s); d.setDate(d.getDate() + n); return fmtDate(d); }
+function niceDate(s) { return parseDate(s).toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" }); }
+function monthLabel(y, m) { return new Date(y, m, 1).toLocaleDateString("en-US", { month: "long", year: "numeric" }); }
+function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 7); }
+function monthMatrix(year, month) {
+  const first = new Date(year, month, 1);
+  const startWeekday = first.getDay();
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  const cells = [];
+  for (let i = 0; i < startWeekday; i++) cells.push(null);
+  for (let d = 1; d <= daysInMonth; d++) cells.push(fmtDate(new Date(year, month, d)));
+  while (cells.length % 7 !== 0) cells.push(null);
+  const weeks = [];
+  for (let i = 0; i < cells.length; i += 7) weeks.push(cells.slice(i, i + 7));
+  return weeks;
+}
+function isSameMonth(dateStr, y, m) { const d = parseDate(dateStr); return d.getFullYear() === y && d.getMonth() === m; }
+
+function seedData() {
+  const today = todayStr();
+  const tomorrow = addDaysStr(today, 1);
+  const catAI = { id: uid(), name: "AI", color: PALETTE[0], isLearning: true, notes: "Goal: first client-ready automation by month end.", roadmap: [
+    { id: uid(), name: "n8n basics", status: "in-progress", pct: 40 },
+    { id: uid(), name: "Make.com automations", status: "not-started", pct: 0 },
+    { id: uid(), name: "Claude API integration", status: "not-started", pct: 0 },
+  ], resources: [{ id: uid(), title: "n8n Docs", url: "https://docs.n8n.io" }] };
+  const catDSA = { id: uid(), name: "DSA", color: PALETTE[1], isLearning: true, notes: "12-week focused C++ plan, started mid-June.", roadmap: [
+    { id: uid(), name: "Two pointers", status: "completed", pct: 100 },
+    { id: uid(), name: "Sliding window", status: "completed", pct: 100 },
+    { id: uid(), name: "Binary search", status: "completed", pct: 100 },
+    { id: uid(), name: "Hash map / set", status: "completed", pct: 100 },
+    { id: uid(), name: "Stack", status: "completed", pct: 100 },
+    { id: uid(), name: "Prefix sum", status: "completed", pct: 100 },
+    { id: uid(), name: "BFS", status: "completed", pct: 100 },
+    { id: uid(), name: "Backtracking", status: "in-progress", pct: 50 },
+    { id: uid(), name: "Dynamic programming", status: "not-started", pct: 0 },
+    { id: uid(), name: "Heap / priority queue", status: "not-started", pct: 0 },
+  ], resources: [{ id: uid(), title: "NeetCode", url: "https://neetcode.io" }] };
+  const catJS = { id: uid(), name: "JavaScript", color: PALETTE[2], isLearning: true, notes: "", roadmap: [
+    { id: uid(), name: "Basics", status: "completed", pct: 100 },
+    { id: uid(), name: "Functions", status: "completed", pct: 100 },
+    { id: uid(), name: "Arrays", status: "completed", pct: 100 },
+    { id: uid(), name: "DOM", status: "completed", pct: 100 },
+    { id: uid(), name: "Async JavaScript", status: "in-progress", pct: 60 },
+    { id: uid(), name: "APIs", status: "not-started", pct: 0 },
+    { id: uid(), name: "Projects", status: "not-started", pct: 0 },
+  ], resources: [{ id: uid(), title: "MDN", url: "https://developer.mozilla.org" }] };
+  const catWeb = { id: uid(), name: "Web Development", color: PALETTE[3], isLearning: true, notes: "", roadmap: [
+    { id: uid(), name: "Express.js routing", status: "in-progress", pct: 20 },
+    { id: uid(), name: "Middleware", status: "not-started", pct: 0 },
+    { id: uid(), name: "REST API design", status: "not-started", pct: 0 },
+  ], resources: [] };
+  const catPersonal = { id: uid(), name: "Personal", color: PALETTE[4], isLearning: false, notes: "", roadmap: [], resources: [] };
+
+  const tasks = [
+    { id: uid(), name: "n8n automation research", categoryId: catAI.id, description: "Look at 3 real automation templates for client work.", date: today, startTime: "09:00", endTime: "09:30", estimatedMinutes: 30, actualMinutes: 0, priority: "medium", status: "in-progress", pct: 40, notes: "", link: "https://docs.n8n.io" },
+    { id: uid(), name: "Backtracking practice (C++)", categoryId: catDSA.id, description: "3 LeetCode-style backtracking problems.", date: today, startTime: "10:00", endTime: "11:00", estimatedMinutes: 60, actualMinutes: 0, priority: "high", status: "not-started", pct: 0, notes: "", link: "" },
+    { id: uid(), name: "Async/await deep dive", categoryId: catJS.id, description: "Revisit promise chaining edge cases.", date: today, startTime: "11:30", endTime: "12:00", estimatedMinutes: 30, actualMinutes: 30, priority: "medium", status: "completed", pct: 100, notes: "Solid now — move to error handling next.", link: "" },
+    { id: uid(), name: "DP intro (C++)", categoryId: catDSA.id, description: "Memoization vs tabulation basics.", date: tomorrow, startTime: "10:00", endTime: "11:00", estimatedMinutes: 60, actualMinutes: 0, priority: "high", status: "not-started", pct: 0, notes: "", link: "" },
+    { id: uid(), name: "Express middleware practice", categoryId: catWeb.id, description: "Build custom logging + error-handling middleware.", date: tomorrow, startTime: "18:00", endTime: "18:30", estimatedMinutes: 30, actualMinutes: 0, priority: "medium", status: "not-started", pct: 0, notes: "", link: "" },
+  ];
+
+  const goals = [
+    { id: uid(), name: "Land a backend developer role", description: "Target product companies: Razorpay, Zepto, Swiggy, Flipkart, Groww, Microsoft/Google India tier.", categoryId: catDSA.id, deadline: addDaysStr(today, 120), pct: 35, status: "in-progress", relatedTaskIds: [tasks[1].id, tasks[3].id], notes: "" },
+    { id: uid(), name: "Get comfortable with async JavaScript", description: "Promises, async/await, fetch, error handling — all solid.", categoryId: catJS.id, deadline: addDaysStr(today, 25), pct: 60, status: "in-progress", relatedTaskIds: [tasks[2].id], notes: "Build a small project after finishing this section." },
+  ];
+
+  return { categories: [catAI, catDSA, catJS, catWeb, catPersonal], tasks, goals };
+}
+
+async function loadData() {
+  try {
+    const res = await window.storage.get(STORAGE_KEY, false);
+    if (res && res.value) return JSON.parse(res.value);
+    throw new Error("empty");
+  } catch (e) {
+    const seeded = seedData();
+    try { await window.storage.set(STORAGE_KEY, JSON.stringify(seeded), false); } catch (e2) {}
+    return seeded;
+  }
+}
+
+function Ring({ pct, size = 64, stroke = 7, color = "#0EA5E9" }) {
+  const r = (size - stroke) / 2;
+  const c = 2 * Math.PI * r;
+  const off = c - (Math.min(100, Math.max(0, pct)) / 100) * c;
+  return (
+    <svg width={size} height={size} className="-rotate-90">
+      <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="#E2E8F0" strokeWidth={stroke} />
+      <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke={color} strokeWidth={stroke} strokeDasharray={c} strokeDashoffset={off} strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function Bar_({ pct, color }) {
+  return (
+    <div className="w-full h-1.5 rounded-full bg-slate-100 overflow-hidden">
+      <div className="h-full rounded-full" style={{ width: `${Math.min(100, Math.max(0, pct))}%`, backgroundColor: color }} />
+    </div>
+  );
+}
+
+function catOf(categories, id) { return categories.find(c => c.id === id) || { name: "Uncategorized", color: "#94A3B8" }; }
+function taskHours(tasks, field) { return tasks.reduce((s, t) => s + (Number(t[field]) || 0), 0) / 60; }
+function catAvgPct(cat) { return cat.roadmap.length ? Math.round(cat.roadmap.reduce((s, t) => s + (Number(t.pct) || 0), 0) / cat.roadmap.length) : null; }
+
+function computeStreak(tasks) {
+  const hasCompleted = (dStr) => tasks.some(t => t.date === dStr && t.status === "completed");
+  let cursor = new Date();
+  if (!hasCompleted(fmtDate(cursor))) cursor.setDate(cursor.getDate() - 1);
+  let streak = 0;
+  while (hasCompleted(fmtDate(cursor))) { streak++; cursor.setDate(cursor.getDate() - 1); }
+  return streak;
+}
+
+export default function LifePlanner() {
+  const [data, setData] = useState(null);
+  const [page, setPage] = useState("dashboard");
+  const [selectedDate, setSelectedDate] = useState(todayStr());
+  const [viewMonth, setViewMonth] = useState(() => { const d = new Date(); return { y: d.getFullYear(), m: d.getMonth() }; });
+  const [taskModal, setTaskModal] = useState(null);
+  const [catModalOpen, setCatModalOpen] = useState(false);
+  const [selectedLearningCat, setSelectedLearningCat] = useState(null);
+  const [goalModal, setGoalModal] = useState(null);
+  const saveTimer = useRef(null);
+
+  useEffect(() => { (async () => { const d = await loadData(); setData(d); setSelectedLearningCat(prev => prev); })(); }, []);
+
+  useEffect(() => {
+    if (!data) return;
+    clearTimeout(saveTimer.current);
+    saveTimer.current = setTimeout(() => {
+      window.storage.set(STORAGE_KEY, JSON.stringify(data), false).catch(() => {});
+    }, 400);
+  }, [data]);
+
+  useEffect(() => {
+    if (data && !selectedLearningCat) {
+      const firstLearning = data.categories.find(c => c.isLearning);
+      if (firstLearning) setSelectedLearningCat(firstLearning.id);
+    }
+  }, [data]);
+
+  if (!data) {
+    return <div className="min-h-screen flex items-center justify-center bg-slate-50 text-slate-400 font-sans text-sm">Loading your planner…</div>;
+  }
+
+  const { categories, tasks, goals } = data;
+
+  function updateTask(id, patch) {
+    setData(d => ({ ...d, tasks: d.tasks.map(t => t.id === id ? { ...t, ...patch } : t) }));
+  }
+  function addTask(task) { setData(d => ({ ...d, tasks: [...d.tasks, { ...task, id: uid() }] })); }
+  function deleteTask(id) {
+    if (!window.confirm("Delete this task? This can't be undone.")) return;
+    setData(d => ({ ...d, tasks: d.tasks.filter(t => t.id !== id) }));
+  }
+  function duplicateTask(t) { addTask({ ...t, name: t.name + " (copy)", status: "not-started", pct: 0, actualMinutes: 0 }); }
+
+  function addCategory(name, color, isLearning) {
+    setData(d => ({ ...d, categories: [...d.categories, { id: uid(), name, color, isLearning, notes: "", roadmap: [], resources: [] }] }));
+  }
+  function updateCategory(id, patch) {
+    setData(d => ({ ...d, categories: d.categories.map(c => c.id === id ? { ...c, ...patch } : c) }));
+  }
+  function deleteCategory(id) {
+    if (!window.confirm("Delete this category? Tasks in it will become uncategorized.")) return;
+    setData(d => ({ ...d, categories: d.categories.filter(c => c.id !== id) }));
+    if (selectedLearningCat === id) setSelectedLearningCat(null);
+  }
+
+  function addRoadmapTopic(catId, name) {
+    updateCategory(catId, { roadmap: [...catOf(categories, catId).roadmap, { id: uid(), name, status: "not-started", pct: 0 }] });
+  }
+  function updateRoadmapTopic(catId, topicId, patch) {
+    const cat = catOf(categories, catId);
+    updateCategory(catId, { roadmap: cat.roadmap.map(t => t.id === topicId ? { ...t, ...patch } : t) });
+  }
+  function deleteRoadmapTopic(catId, topicId) {
+    const cat = catOf(categories, catId);
+    updateCategory(catId, { roadmap: cat.roadmap.filter(t => t.id !== topicId) });
+  }
+  function addResource(catId, title, url) {
+    const cat = catOf(categories, catId);
+    updateCategory(catId, { resources: [...cat.resources, { id: uid(), title, url }] });
+  }
+  function deleteResource(catId, resId) {
+    const cat = catOf(categories, catId);
+    updateCategory(catId, { resources: cat.resources.filter(r => r.id !== resId) });
+  }
