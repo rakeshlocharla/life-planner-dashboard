@@ -1,0 +1,214 @@
+                <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${STATUS_DOT[topic.status]}`} />
+                <span className="text-[13px] flex-1 truncate">{topic.name}</span>
+                <select value={topic.status} onChange={e => updateRoadmapTopic(cat.id, topic.id, { status: e.target.value, pct: e.target.value === "completed" ? 100 : topic.pct })}
+                  className="text-[11px] border border-slate-200 rounded-md px-1.5 py-1 bg-slate-50 outline-none">
+                  {STATUS_OPTS.slice(0, 3).map(s => <option key={s} value={s}>{STATUS_LABEL[s]}</option>)}
+                </select>
+                <input type="number" min="0" max="100" value={topic.pct} onChange={e => updateRoadmapTopic(cat.id, topic.id, { pct: Math.min(100, Math.max(0, Number(e.target.value) || 0)) })}
+                  className="w-14 text-[11px] border border-slate-200 rounded-md px-1.5 py-1 bg-slate-50 outline-none text-right" />
+                <span className="text-[10.5px] text-slate-400">%</span>
+                <button onClick={() => deleteRoadmapTopic(cat.id, topic.id)} className="text-[11px] text-slate-400 hover:text-rose-600 px-1">✕</button>
+              </div>
+            ))}
+          </div>
+          <div className="flex gap-2 mt-3">
+            <input className="in flex-1" placeholder="Add a topic, e.g. Error handling" value={newTopic} onChange={e => setNewTopic(e.target.value)} />
+            <button onClick={() => { if (!newTopic.trim()) return; addRoadmapTopic(cat.id, newTopic.trim()); setNewTopic(""); }}
+              className="text-[12px] font-medium px-3 py-2 rounded-lg border border-slate-200 hover:bg-slate-50">Add topic</button>
+          </div>
+        </div>
+
+        <div className="bg-white border border-slate-200 rounded-xl p-5">
+          <h2 className="text-[14px] font-semibold mb-3">Resources</h2>
+          {cat.resources.length === 0 && <div className="text-[12.5px] text-slate-400 mb-2">No links yet.</div>}
+          <div className="space-y-1.5 mb-3">
+            {cat.resources.map(r => (
+              <div key={r.id} className="flex items-center gap-2 text-[13px]">
+                <a href={r.url} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline flex-1 truncate">{r.title}</a>
+                <button onClick={() => deleteResource(cat.id, r.id)} className="text-[11px] text-slate-400 hover:text-rose-600 px-1">✕</button>
+              </div>
+            ))}
+          </div>
+          <div className="flex gap-2">
+            <input className="in w-40" placeholder="Title" value={resTitle} onChange={e => setResTitle(e.target.value)} />
+            <input className="in flex-1" placeholder="https://..." value={resUrl} onChange={e => setResUrl(e.target.value)} />
+            <button onClick={() => { if (!resTitle.trim() || !resUrl.trim()) return; addResource(cat.id, resTitle.trim(), resUrl.trim()); setResTitle(""); setResUrl(""); }}
+              className="text-[12px] font-medium px-3 py-2 rounded-lg border border-slate-200 hover:bg-slate-50">Add</button>
+          </div>
+        </div>
+
+        <div className="bg-white border border-slate-200 rounded-xl p-5">
+          <h2 className="text-[14px] font-semibold mb-3">Notes</h2>
+          <textarea className="in h-20 w-full" value={notesDraft} onChange={e => setNotesDraft(e.target.value)} onBlur={() => updateCategory(cat.id, { notes: notesDraft })} placeholder="e.g. Revise promises tomorrow." />
+        </div>
+
+        <div className="bg-white border border-slate-200 rounded-xl p-5">
+          <h2 className="text-[14px] font-semibold mb-3">Related tasks</h2>
+          {catTasks.length === 0 && <div className="text-[12.5px] text-slate-400">No tasks tagged to this category yet.</div>}
+          <div className="space-y-1.5">
+            {catTasks.slice(0, 8).map(t => (
+              <div key={t.id} className="flex items-center gap-2 text-[13px]">
+                <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${STATUS_DOT[t.status]}`} />
+                <span className="flex-1 truncate">{t.name}</span>
+                <span className="text-[11px] text-slate-400">{t.date}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+      <style>{`.in{font-size:13px;border:1px solid #E2E8F0;border-radius:8px;padding:7px 9px;outline:none;background:#F8FAFC;} .in:focus{border-color:#94A3B8;background:white;}`}</style>
+    </div>
+  );
+}
+
+function Goals({ goals, categories, tasks, setGoalModal, deleteGoal }) {
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <h1 className="text-2xl font-semibold tracking-tight">Goals</h1>
+        <button onClick={() => setGoalModal({ mode: "add" })} className="text-[12.5px] font-medium bg-slate-900 text-white px-3 py-1.5 rounded-lg hover:bg-slate-700">+ Add goal</button>
+      </div>
+      {goals.length === 0 && <div className="text-[13.5px] text-slate-400">No goals yet.</div>}
+      <div className="grid grid-cols-2 gap-4">
+        {goals.map(g => {
+          const cat = catOf(categories, g.categoryId);
+          const related = tasks.filter(t => g.relatedTaskIds.includes(t.id));
+          const daysLeft = Math.ceil((parseDate(g.deadline) - new Date()) / 86400000);
+          return (
+            <div key={g.id} className="bg-white border border-slate-200 rounded-xl p-5">
+              <div className="flex items-start justify-between gap-2">
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: cat.color }} />
+                    <h3 className="text-[14.5px] font-semibold truncate">{g.name}</h3>
+                  </div>
+                  <p className="text-[12.5px] text-slate-500 mt-1">{g.description}</p>
+                </div>
+                <div className="flex gap-1 shrink-0">
+                  <button onClick={() => setGoalModal({ mode: "edit", goal: g })} className="text-[11.5px] text-slate-400 hover:text-slate-800 px-1">Edit</button>
+                  <button onClick={() => deleteGoal(g.id)} className="text-[11.5px] text-slate-400 hover:text-rose-600 px-1">Del</button>
+                </div>
+              </div>
+              <div className="mt-3"><Bar_ pct={g.pct} color={cat.color} /></div>
+              <div className="flex items-center justify-between mt-2 text-[11.5px] text-slate-400">
+                <span>{g.pct}% complete</span>
+                <span>{daysLeft >= 0 ? `${daysLeft} days left` : "overdue"} · {g.deadline}</span>
+              </div>
+              {related.length > 0 && (
+                <div className="mt-3 pt-3 border-t border-slate-100 space-y-1">
+                  {related.map(t => <div key={t.id} className="text-[12px] text-slate-500 flex items-center gap-1.5"><span className={`w-1.5 h-1.5 rounded-full ${STATUS_DOT[t.status]}`} />{t.name}</div>)}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function GoalModal({ modal, categories, tasks, onClose, onSave }) {
+  const isEdit = modal.mode === "edit";
+  const [g, setG] = useState(isEdit ? { ...modal.goal } : {
+    id: uid(), name: "", description: "", categoryId: categories[0]?.id || "", deadline: addDaysStr(todayStr(), 30),
+    pct: 0, status: "not-started", relatedTaskIds: [], notes: "",
+  });
+  function set(f, v) { setG(prev => ({ ...prev, [f]: v })); }
+  function toggleTask(id) { setG(prev => ({ ...prev, relatedTaskIds: prev.relatedTaskIds.includes(id) ? prev.relatedTaskIds.filter(x => x !== id) : [...prev.relatedTaskIds, id] })); }
+  const catTasks = tasks.filter(t => t.categoryId === g.categoryId);
+
+  return (
+    <Modal title={isEdit ? "Edit goal" : "Add goal"} onClose={onClose}>
+      <div className="grid grid-cols-2 gap-3">
+        <Field label="Goal name" full><input className="in" value={g.name} onChange={e => set("name", e.target.value)} /></Field>
+        <Field label="Description" full><textarea className="in h-16" value={g.description} onChange={e => set("description", e.target.value)} /></Field>
+        <Field label="Category"><select className="in" value={g.categoryId} onChange={e => set("categoryId", e.target.value)}>{categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select></Field>
+        <Field label="Deadline"><input type="date" className="in" value={g.deadline} onChange={e => set("deadline", e.target.value)} /></Field>
+        <Field label="Progress %"><input type="number" min="0" max="100" className="in" value={g.pct} onChange={e => set("pct", Math.min(100, Math.max(0, Number(e.target.value) || 0)))} /></Field>
+        <Field label="Status"><select className="in" value={g.status} onChange={e => set("status", e.target.value)}><option value="not-started">Not started</option><option value="in-progress">In progress</option><option value="completed">Completed</option></select></Field>
+        <Field label="Notes" full><textarea className="in h-16" value={g.notes} onChange={e => set("notes", e.target.value)} /></Field>
+        <Field label="Related tasks" full>
+          <div className="max-h-32 overflow-y-auto border border-slate-200 rounded-lg p-2 space-y-1 bg-slate-50">
+            {catTasks.length === 0 && <div className="text-[12px] text-slate-400">No tasks in this category yet.</div>}
+            {catTasks.map(t => (
+              <label key={t.id} className="flex items-center gap-2 text-[12.5px]">
+                <input type="checkbox" checked={g.relatedTaskIds.includes(t.id)} onChange={() => toggleTask(t.id)} />
+                {t.name} <span className="text-slate-400">({t.date})</span>
+              </label>
+            ))}
+          </div>
+        </Field>
+      </div>
+      <div className="flex justify-end gap-2 mt-5">
+        <button onClick={onClose} className="text-[12.5px] font-medium px-3.5 py-2 rounded-lg border border-slate-200 hover:bg-slate-50">Cancel</button>
+        <button onClick={() => onSave(g)} disabled={!g.name.trim()} className="text-[12.5px] font-medium px-3.5 py-2 rounded-lg bg-slate-900 text-white hover:bg-slate-700 disabled:opacity-40">Save goal</button>
+      </div>
+      <style>{`.in{width:100%;font-size:13px;border:1px solid #E2E8F0;border-radius:8px;padding:7px 9px;outline:none;background:#F8FAFC;} .in:focus{border-color:#94A3B8;background:white;}`}</style>
+    </Modal>
+  );
+}
+
+function Progress({ categories, tasks, monthTasks, viewMonth }) {
+  const catData = categories.map(c => {
+    const roadmapPct = catAvgPct(c);
+    const cTasks = tasks.filter(t => t.categoryId === c.id);
+    const taskPct = cTasks.length ? Math.round((cTasks.filter(t => t.status === "completed").length / cTasks.length) * 100) : 0;
+    return { name: c.name, pct: roadmapPct !== null ? roadmapPct : taskPct, color: c.color };
+  }).filter(c => c.pct !== null);
+
+  const hoursData = categories.map(c => {
+    const cTasks = monthTasks.filter(t => t.categoryId === c.id);
+    return { name: c.name, planned: Number(taskHours(cTasks, "estimatedMinutes").toFixed(1)), actual: Number(taskHours(cTasks, "actualMinutes").toFixed(1)) };
+  }).filter(c => c.planned > 0 || c.actual > 0);
+
+  const sorted = [...catData].sort((a, b) => b.pct - a.pct);
+  const best = sorted[0]; const worst = sorted[sorted.length - 1];
+  const totalTasks = tasks.length;
+  const completedTasks = tasks.filter(t => t.status === "completed").length;
+
+  return (
+    <div className="space-y-6">
+      <h1 className="text-2xl font-semibold tracking-tight">Progress</h1>
+
+      <div className="grid grid-cols-4 gap-4">
+        <StatCard label="Tasks completed" value={`${completedTasks}/${totalTasks}`} sub="all time" />
+        <StatCard label="Completion rate" value={totalTasks ? `${Math.round((completedTasks / totalTasks) * 100)}%` : "0%"} sub="all time" />
+        <StatCard label="Best category" value={best ? best.name : "—"} sub={best ? `${best.pct}%` : ""} />
+        <StatCard label="Needs attention" value={worst ? worst.name : "—"} sub={worst ? `${worst.pct}%` : ""} />
+      </div>
+
+      <div className="bg-white border border-slate-200 rounded-xl p-5">
+        <h2 className="text-[14px] font-semibold mb-4">Completion by category</h2>
+        <div style={{ width: "100%", height: 220 }}>
+          <ResponsiveContainer>
+            <BarChart data={catData}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#F1F5F9" />
+              <XAxis dataKey="name" tick={{ fontSize: 11 }} />
+              <YAxis domain={[0, 100]} tick={{ fontSize: 11 }} />
+              <Tooltip />
+              <Bar dataKey="pct" radius={[4, 4, 0, 0]}>
+                {catData.map((c, i) => <Cell key={i} fill={c.color} />)}
+              </Bar>
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+      </div>
+
+      <div className="bg-white border border-slate-200 rounded-xl p-5">
+        <h2 className="text-[14px] font-semibold mb-1">Planned vs actual hours — {monthLabel(viewMonth.y, viewMonth.m)}</h2>
+        <div style={{ width: "100%", height: 220 }}>
+          <ResponsiveContainer>
+            <BarChart data={hoursData}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#F1F5F9" />
+              <XAxis dataKey="name" tick={{ fontSize: 11 }} />
+              <YAxis tick={{ fontSize: 11 }} />
+              <Tooltip />
+              <Bar dataKey="planned" fill="#CBD5E1" radius={[4, 4, 0, 0]} name="Planned (h)" />
+              <Bar dataKey="actual" fill="#0EA5E9" radius={[4, 4, 0, 0]} name="Actual (h)" />
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+      </div>
+    </div>
+  );
+}
