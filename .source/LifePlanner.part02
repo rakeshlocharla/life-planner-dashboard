@@ -1,0 +1,265 @@
+  }
+  function addGoal(goal) { setData(d => ({ ...d, goals: [...d.goals, { ...goal, id: uid() }] })); }
+  function updateGoal(id, patch) { setData(d => ({ ...d, goals: d.goals.map(g => g.id === id ? { ...g, ...patch } : g) })); }
+  function deleteGoal(id) {
+    if (!window.confirm("Delete this goal?")) return;
+    setData(d => ({ ...d, goals: d.goals.filter(g => g.id !== id) }));
+  }
+
+  const todayTasks = tasks.filter(t => t.date === todayStr());
+  const monthTasks = tasks.filter(t => isSameMonth(t.date, viewMonth.y, viewMonth.m));
+  const monthCompleted = monthTasks.filter(t => t.status === "completed").length;
+  const monthPct = monthTasks.length ? Math.round((monthCompleted / monthTasks.length) * 100) : 0;
+  const plannedHoursMonth = taskHours(monthTasks, "estimatedMinutes");
+  const completedHoursMonth = taskHours(monthTasks, "actualMinutes");
+  const streak = computeStreak(tasks);
+  const upcoming = tasks.filter(t => t.date > todayStr() && t.status !== "completed").sort((a, b) => a.date.localeCompare(b.date)).slice(0, 5);
+
+  const NAV = [
+    { id: "dashboard", label: "Dashboard" },
+    { id: "planner", label: "Planner" },
+    { id: "learning", label: "Learning" },
+    { id: "goals", label: "Goals" },
+    { id: "progress", label: "Progress" },
+  ];
+
+  return (
+    <div className="min-h-screen bg-slate-50 font-sans text-slate-800 flex">
+      <style>{`@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap'); .font-sans{font-family:'Inter',sans-serif;}`}</style>
+
+      <aside className="w-52 shrink-0 border-r border-slate-200 bg-white p-4 flex flex-col gap-1">
+        <div className="text-[15px] font-semibold px-2 py-3 tracking-tight">Command Center</div>
+        {NAV.map(n => (
+          <button key={n.id} onClick={() => setPage(n.id)}
+            className={`text-left px-3 py-2 rounded-lg text-[13.5px] font-medium transition-colors ${page === n.id ? "bg-slate-900 text-white" : "text-slate-600 hover:bg-slate-100"}`}>
+            {n.label}
+          </button>
+        ))}
+        <button onClick={() => setCatModalOpen(true)} className="mt-3 text-left px-3 py-2 rounded-lg text-[12.5px] text-slate-400 hover:text-slate-600 hover:bg-slate-100">
+          Manage categories
+        </button>
+      </aside>
+
+      <main className="flex-1 p-8 max-w-5xl">
+        {page === "dashboard" && (
+          <Dashboard {...{ categories, todayTasks, monthPct, plannedHoursMonth, completedHoursMonth, streak, upcoming, updateTask }} />
+        )}
+        {page === "planner" && (
+          <Planner {...{ categories, tasks, viewMonth, setViewMonth, selectedDate, setSelectedDate, setTaskModal, updateTask, deleteTask, duplicateTask }} />
+        )}
+        {page === "learning" && (
+          <Learning {...{ categories, tasks, selectedLearningCat, setSelectedLearningCat, addRoadmapTopic, updateRoadmapTopic, deleteRoadmapTopic, addResource, deleteResource, updateCategory }} />
+        )}
+        {page === "goals" && (
+          <Goals {...{ goals, categories, tasks, setGoalModal, deleteGoal }} />
+        )}
+        {page === "progress" && (
+          <Progress {...{ categories, tasks, monthTasks, viewMonth }} />
+        )}
+      </main>
+
+      {taskModal && (
+        <TaskModal
+          modal={taskModal}
+          categories={categories}
+          onClose={() => setTaskModal(null)}
+          onSave={(t) => { if (taskModal.mode === "edit") updateTask(t.id, t); else addTask(t); setTaskModal(null); }}
+          onDelete={(id) => { deleteTask(id); setTaskModal(null); }}
+        />
+      )}
+      {catModalOpen && (
+        <CategoryModal
+          categories={categories}
+          onClose={() => setCatModalOpen(false)}
+          onAdd={addCategory}
+          onUpdate={updateCategory}
+          onDelete={deleteCategory}
+        />
+      )}
+      {goalModal && (
+        <GoalModal
+          modal={goalModal}
+          categories={categories}
+          tasks={tasks}
+          onClose={() => setGoalModal(null)}
+          onSave={(g) => { if (goalModal.mode === "edit") updateGoal(g.id, g); else addGoal(g); setGoalModal(null); }}
+        />
+      )}
+    </div>
+  );
+}
+
+function Dashboard({ categories, todayTasks, monthPct, plannedHoursMonth, completedHoursMonth, streak, upcoming, updateTask }) {
+  const todayCompleted = todayTasks.filter(t => t.status === "completed").length;
+  const todayPct = todayTasks.length ? Math.round((todayCompleted / todayTasks.length) * 100) : 0;
+  const learningCats = categories.filter(c => c.isLearning);
+
+  return (
+    <div className="space-y-8">
+      <div>
+        <div className="text-[13px] text-slate-400 font-medium">{new Date().toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", year: "numeric" })}</div>
+        <h1 className="text-2xl font-semibold tracking-tight mt-0.5">Today</h1>
+      </div>
+
+      <div className="grid grid-cols-4 gap-4">
+        <StatCard label="Today's completion" value={`${todayPct}%`} sub={`${todayCompleted}/${todayTasks.length} tasks`} />
+        <StatCard label="Month completion" value={`${monthPct}%`} sub="this calendar month" />
+        <StatCard label="Hours this month" value={`${completedHoursMonth.toFixed(1)} / ${plannedHoursMonth.toFixed(1)}h`} sub="completed / planned" />
+        <StatCard label="Current streak" value={`${streak} day${streak === 1 ? "" : "s"}`} sub="consecutive days completed" />
+      </div>
+
+      <div className="grid grid-cols-3 gap-6">
+        <div className="col-span-2 bg-white border border-slate-200 rounded-xl p-5">
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="text-[14px] font-semibold">Today's plan</h2>
+            <Ring pct={todayPct} size={40} stroke={5} />
+          </div>
+          {todayTasks.length === 0 && <div className="text-[13px] text-slate-400 py-6 text-center">Nothing scheduled today. Add tasks from the Planner.</div>}
+          <div className="space-y-2">
+            {todayTasks.map(t => {
+              const cat = catOf(categories, t.categoryId);
+              return (
+                <div key={t.id} className="flex items-center gap-3 py-2 border-b border-slate-100 last:border-0">
+                  <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: cat.color }} />
+                  <span className="text-[13.5px] flex-1 truncate">{t.name}</span>
+                  <span className="text-[11px] text-slate-400 font-medium">{t.estimatedMinutes}m</span>
+                  <select value={t.status} onChange={e => updateTask(t.id, { status: e.target.value, pct: e.target.value === "completed" ? 100 : t.pct })}
+                    className="text-[11px] border border-slate-200 rounded-md px-1.5 py-1 bg-slate-50 outline-none">
+                    {STATUS_OPTS.map(s => <option key={s} value={s}>{STATUS_LABEL[s]}</option>)}
+                  </select>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        <div className="bg-white border border-slate-200 rounded-xl p-5">
+          <h2 className="text-[14px] font-semibold mb-3">Upcoming</h2>
+          {upcoming.length === 0 && <div className="text-[13px] text-slate-400 py-4 text-center">Nothing upcoming.</div>}
+          <div className="space-y-2.5">
+            {upcoming.map(t => (
+              <div key={t.id} className="text-[13px]">
+                <div className="font-medium truncate">{t.name}</div>
+                <div className="text-[11px] text-slate-400">{niceDate(t.date)}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      <div className="bg-white border border-slate-200 rounded-xl p-5">
+        <h2 className="text-[14px] font-semibold mb-4">Learning areas</h2>
+        <div className="grid grid-cols-4 gap-5">
+          {learningCats.map(c => {
+            const pct = catAvgPct(c);
+            return (
+              <div key={c.id} className="flex items-center gap-3">
+                <Ring pct={pct || 0} size={44} stroke={5} color={c.color} />
+                <div className="min-w-0">
+                  <div className="text-[13px] font-medium truncate">{c.name}</div>
+                  <div className="text-[11px] text-slate-400">{pct === null ? "no topics" : `${pct}% complete`}</div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function StatCard({ label, value, sub }) {
+  return (
+    <div className="bg-white border border-slate-200 rounded-xl p-4">
+      <div className="text-[11px] text-slate-400 font-medium uppercase tracking-wide">{label}</div>
+      <div className="text-xl font-semibold mt-1">{value}</div>
+      <div className="text-[11.5px] text-slate-400 mt-0.5">{sub}</div>
+    </div>
+  );
+}
+
+function Planner({ categories, tasks, viewMonth, setViewMonth, selectedDate, setSelectedDate, setTaskModal, updateTask, deleteTask, duplicateTask }) {
+  const weeks = monthMatrix(viewMonth.y, viewMonth.m);
+  const dayTasks = (d) => tasks.filter(t => t.date === d);
+  const selTasks = dayTasks(selectedDate).sort((a, b) => (a.startTime || "").localeCompare(b.startTime || ""));
+
+  function shiftMonth(n) {
+    let m = viewMonth.m + n, y = viewMonth.y;
+    if (m < 0) { m = 11; y--; } if (m > 11) { m = 0; y++; }
+    setViewMonth({ y, m });
+  }
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <h1 className="text-2xl font-semibold tracking-tight">Planner</h1>
+        <div className="flex items-center gap-2">
+          <button onClick={() => shiftMonth(-1)} className="w-8 h-8 rounded-lg border border-slate-200 hover:bg-slate-100 text-slate-500">‹</button>
+          <div className="text-[13.5px] font-medium w-36 text-center">{monthLabel(viewMonth.y, viewMonth.m)}</div>
+          <button onClick={() => shiftMonth(1)} className="w-8 h-8 rounded-lg border border-slate-200 hover:bg-slate-100 text-slate-500">›</button>
+        </div>
+      </div>
+
+      <div className="bg-white border border-slate-200 rounded-xl p-4">
+        <div className="grid grid-cols-7 text-[11px] text-slate-400 font-medium mb-2 px-1">
+          {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map(d => <div key={d} className="text-center">{d}</div>)}
+        </div>
+        <div className="grid grid-cols-7 gap-1.5">
+          {weeks.flat().map((d, i) => {
+            if (!d) return <div key={i} />;
+            const dt = dayTasks(d);
+            const done = dt.filter(t => t.status === "completed").length;
+            const pct = dt.length ? Math.round((done / dt.length) * 100) : 0;
+            const isSel = d === selectedDate;
+            const isToday = d === todayStr();
+            return (
+              <button key={i} onClick={() => setSelectedDate(d)}
+                className={`h-20 rounded-lg border p-2 text-left flex flex-col justify-between transition-colors ${isSel ? "border-slate-900 bg-slate-900 text-white" : isToday ? "border-slate-300 bg-slate-50" : "border-slate-100 hover:border-slate-300"}`}>
+                <div className={`text-[12px] font-semibold ${isSel ? "text-white" : "text-slate-700"}`}>{parseDate(d).getDate()}</div>
+                {dt.length > 0 && (
+                  <div>
+                    <div className={`text-[10px] ${isSel ? "text-slate-300" : "text-slate-400"}`}>{done}/{dt.length} done</div>
+                    <div className={`w-full h-1 rounded-full mt-1 ${isSel ? "bg-slate-700" : "bg-slate-100"} overflow-hidden`}>
+                      <div className="h-full bg-emerald-400 rounded-full" style={{ width: `${pct}%` }} />
+                    </div>
+                  </div>
+                )}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      <div className="bg-white border border-slate-200 rounded-xl p-5">
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-[14.5px] font-semibold">{niceDate(selectedDate)}</h2>
+          <button onClick={() => setTaskModal({ mode: "add", defaultDate: selectedDate })}
+            className="text-[12.5px] font-medium bg-slate-900 text-white px-3 py-1.5 rounded-lg hover:bg-slate-700">+ Add task</button>
+        </div>
+        {selTasks.length === 0 && <div className="text-[13px] text-slate-400 py-6 text-center">No tasks for this day yet.</div>}
+        <div className="divide-y divide-slate-100">
+          {selTasks.map(t => {
+            const cat = catOf(categories, t.categoryId);
+            return (
+              <div key={t.id} className="py-3 flex items-center gap-3">
+                <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: cat.color }} />
+                <div className="flex-1 min-w-0">
+                  <div className="text-[13.5px] font-medium truncate">{t.name}</div>
+                  <div className="text-[11px] text-slate-400">{cat.name} · {t.startTime || "--:--"}–{t.endTime || "--:--"} · est {t.estimatedMinutes}m</div>
+                </div>
+                <span className={`text-[10.5px] font-medium px-1.5 py-0.5 rounded ${PRIORITY_STYLE[t.priority]}`}>{t.priority}</span>
+                <span className="flex items-center gap-1.5 text-[11px] text-slate-500">
+                  <span className={`w-1.5 h-1.5 rounded-full ${STATUS_DOT[t.status]}`} />{STATUS_LABEL[t.status]}
+                </span>
+                <span className="text-[11px] text-slate-400 w-9 text-right">{t.pct}%</span>
+                <button onClick={() => setTaskModal({ mode: "edit", task: t })} className="text-[11.5px] text-slate-400 hover:text-slate-800 px-1.5">Edit</button>
+                <button onClick={() => duplicateTask(t)} className="text-[11.5px] text-slate-400 hover:text-slate-800 px-1.5">Dup</button>
+                <button onClick={() => deleteTask(t.id)} className="text-[11.5px] text-slate-400 hover:text-rose-600 px-1.5">Del</button>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
