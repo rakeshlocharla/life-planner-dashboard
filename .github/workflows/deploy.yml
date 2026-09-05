@@ -35,6 +35,9 @@ jobs:
       - name: Install dependencies
         run: npm install
 
+      - name: Reassemble original LifePlanner source
+        run: cat .source/LifePlanner.part01 .source/LifePlanner.part02 .source/LifePlanner.part03 .source/LifePlanner.part04 > src/LifePlanner.jsx
+
       - name: Build
         run: npm run build
 
