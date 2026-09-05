@@ -199,7 +199,3 @@ export default function LifePlanner() {
     const cat = catOf(categories, catId);
     updateCategory(catId, { resources: [...cat.resources, { id: uid(), title, url }] });
   }
-  function deleteResource(catId, resId) {
-    const cat = catOf(categories, catId);
-    updateCategory(catId, { resources: cat.resources.filter(r => r.id !== resId) });
-  }
