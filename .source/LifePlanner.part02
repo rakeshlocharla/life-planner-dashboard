@@ -1,4 +1,3 @@
-  }
   function deleteResource(catId, resId) {
     const cat = catOf(categories, catId);
     updateCategory(catId, { resources: cat.resources.filter(r => r.id !== resId) });
