@@ -37,9 +37,6 @@ jobs:
       - name: Reassemble original LifePlanner source
         run: cat .source/LifePlanner.part01 .source/LifePlanner.part02 .source/LifePlanner.part03 .source/LifePlanner.part04 .source/LifePlanner.part05 > src/LifePlanner.jsx
 
-      - name: Verify reconstructed source
-        run: node --check src/LifePlanner.jsx
-
       - name: Build
         run: npm run build
 
